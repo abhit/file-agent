@@ -35,23 +35,55 @@ def get_available_models():
     except requests.exceptions.RequestException:
         return []
 
-@st.cache_resource
-def get_vectorstore():
+def build_vectorstore(force_rebuild=False):
+    """Builds or loads the vectorstore. Set force_rebuild=True to re-index all files."""
     embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
-    if os.path.exists(DB_DIR) and os.listdir(DB_DIR):
+    if not force_rebuild and os.path.exists(DB_DIR) and os.listdir(DB_DIR):
         return Chroma(persist_directory=DB_DIR, embedding_function=embeddings)
     else:
-        st.info("Building database from files for the first time... this may take a minute depending on data size.")
+        st.info("Indexing files from the data directory... this may take a minute depending on data size.")
         os.makedirs(DATA_DIR, exist_ok=True)
-        loader = DirectoryLoader(DATA_DIR, glob="**/*.*", use_multithreading=True)
-        docs = loader.load()
-        if not docs:
-            st.warning(f"No documents found in `{DATA_DIR}`. Please add some files to the share.")
+
+        # Use specific loaders for better file type support
+        loaders = {
+            "**/*.pdf": PyPDFLoader,
+            "**/*.txt": TextLoader,
+        }
+        all_docs = []
+        for glob_pattern, loader_cls in loaders.items():
+            try:
+                loader = DirectoryLoader(DATA_DIR, glob=glob_pattern, loader_cls=loader_cls, use_multithreading=True)
+                all_docs.extend(loader.load())
+            except Exception as e:
+                st.warning(f"Error loading {glob_pattern}: {e}")
+
+        # Fallback: load any remaining file types with the default loader
+        try:
+            loader = DirectoryLoader(DATA_DIR, glob="**/*.*", use_multithreading=True)
+            fallback_docs = loader.load()
+            # Only add docs not already loaded by specific loaders
+            loaded_sources = {doc.metadata.get("source") for doc in all_docs}
+            for doc in fallback_docs:
+                if doc.metadata.get("source") not in loaded_sources:
+                    all_docs.append(doc)
+        except Exception:
+            pass
+
+        if not all_docs:
+            st.warning(f"No documents found in `{DATA_DIR}`. Please add some files to the data share.")
             return None
+
+        st.info(f"Found {len(all_docs)} document chunks from {len(set(d.metadata.get('source','') for d in all_docs))} files.")
         text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=200)
-        splits = text_splitter.split_documents(docs)
+        splits = text_splitter.split_documents(all_docs)
+
+        # Clear old DB if rebuilding
+        if force_rebuild and os.path.exists(DB_DIR):
+            import shutil
+            shutil.rmtree(DB_DIR)
+
         vectorstore = Chroma.from_documents(documents=splits, embedding=embeddings, persist_directory=DB_DIR)
-        st.success("Database built successfully!")
+        st.success(f"Database built successfully! Indexed {len(splits)} chunks.")
         return vectorstore
 
 def get_agent(vectorstore, selected_model):
@@ -106,8 +138,15 @@ with st.sidebar:
         st.info("Note: Tool calling requires an advanced model like `llama3.1` or `llama3.2`.")
         selected_model = st.selectbox("Select local LLM model:", available_models)
 
+    st.divider()
+    st.subheader("📁 Data Index")
+    if st.button("🔄 Re-index Files", help="Re-scan the data directory and rebuild the search index. Use this after adding new files."):
+        st.session_state["force_rebuild"] = True
+        st.rerun()
+
 # --- App Logic ---
-vectorstore = get_vectorstore()
+force_rebuild = st.session_state.pop("force_rebuild", False)
+vectorstore = build_vectorstore(force_rebuild=force_rebuild)
 
 if vectorstore and selected_model:
     agent_executor = get_agent(vectorstore, selected_model)
