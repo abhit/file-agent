@@ -29,6 +29,10 @@ services:
       retries: 5
       start_period: 30s
     # Use DGX Spark GPUs for model acceleration
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
