@@ -6,7 +6,7 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import ChatOllama
-from langchain.tools.retriever import create_retriever_tool
+from langchain_core.tools import tool
 from langchain_community.tools import DuckDuckGoSearchRun
 from langgraph.prebuilt import create_react_agent
 
@@ -60,13 +60,17 @@ def get_agent(vectorstore, selected_model):
 
     # --- DEFINE TOOLS ---
     
-    # Tool 1: Local File Retriever
+    # Tool 1: Local File Retriever using stable @tool decorator
     retriever = vectorstore.as_retriever(search_kwargs={"k": 4})
-    local_search_tool = create_retriever_tool(
-        retriever,
-        "search_local_files",
-        "Searches and returns excerpts from the user's private local file share. Always use this first for any questions about private internal data, projects, or documents."
-    )
+    
+    @tool
+    def search_local_files(query: str) -> str:
+        """Searches and returns excerpts from the user's private local file share. Always use this first for any questions about private internal data, projects, or documents."""
+        docs = retriever.invoke(query)
+        # Format the text and sources so the LLM can cleanly read them
+        return "\n\n".join([f"Source Fileshare Document: {doc.metadata.get('source', 'Unknown')}\n{doc.page_content}" for doc in docs])
+
+    local_search_tool = search_local_files
 
     # Tool 2: Web Search
     web_search_tool = DuckDuckGoSearchRun(
@@ -87,6 +91,7 @@ def get_agent(vectorstore, selected_model):
 
     # Create the React Agent (Requires a tool-calling capable model like llama3.1 or llama3.2)
     return create_react_agent(llm, tools, prompt=system_prompt)
+
 
 # --- Sidebar Model Selection ---
 with st.sidebar:
