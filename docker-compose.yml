@@ -23,12 +23,16 @@ services:
       - ./ollama_data:/root/.ollama
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "cat < /dev/tcp/localhost/11434 || exit 1"]
+      test: ["CMD", "ollama", "list"]
       interval: 15s
       timeout: 5s
       retries: 5
       start_period: 30s
     # Use DGX Spark GPUs for model acceleration
-    runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=all
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
