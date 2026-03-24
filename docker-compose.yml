@@ -1,5 +1,3 @@
-version: '3.8'
-
 services:
   agent-ui:
     build: .
@@ -7,13 +5,13 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./data:/app/data 
+      - ./data:/app/data
       - ./chroma_db:/app/chroma_db
     environment:
-      # Tell the UI where the Ollama service is located inside the docker network
       - OLLAMA_BASE_URL=http://ollama:11434
     depends_on:
-      - ollama
+      ollama:
+        condition: service_healthy
     restart: unless-stopped
 
   ollama:
@@ -22,9 +20,14 @@ services:
     ports:
       - "11434:11434"
     volumes:
-      # Ensure model weights are saved locally so they don't have to be re-downloaded
       - ./ollama_data:/root/.ollama
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11434/api/tags"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     # Use DGX Spark GPUs for model acceleration
     deploy:
       resources:
