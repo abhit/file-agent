@@ -1,5 +1,6 @@
 chroma_db/
+ollama_data/
 .env
 __pycache__/
-*.pdf
-*.txt
+.git/
+.claude/

@@ -3,7 +3,7 @@ import requests
 import streamlit as st
 from langchain_community.document_loaders import DirectoryLoader, TextLoader, PyPDFLoader
 from langchain_text_splitters import RecursiveCharacterTextSplitter
-from langchain_community.embeddings import HuggingFaceEmbeddings
+from langchain_huggingface import HuggingFaceEmbeddings
 from langchain_community.vectorstores import Chroma
 from langchain_ollama import ChatOllama
 from langchain.tools.retriever import create_retriever_tool
@@ -86,7 +86,7 @@ def get_agent(vectorstore, selected_model):
     )
 
     # Create the React Agent (Requires a tool-calling capable model like llama3.1 or llama3.2)
-    return create_react_agent(llm, tools, state_modifier=system_prompt)
+    return create_react_agent(llm, tools, prompt=system_prompt)
 
 # --- Sidebar Model Selection ---
 with st.sidebar:
