@@ -12,3 +12,4 @@ tiktoken>=0.6.0
 unstructured[pdf]>=0.12.0
 requests>=2.31.0
 duckduckgo-search>=5.0.0
+ddgs>=0.1.0
